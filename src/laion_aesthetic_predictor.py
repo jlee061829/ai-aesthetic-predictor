@@ -4,6 +4,7 @@ from torchvision import transforms
 from PIL import Image
 import timm
 import requests
+from pathlib import Path
 
 # A custom transform to resize and pad images to a square
 class ResizeAndPad:
@@ -32,6 +33,7 @@ class ResizeAndPad:
 MODEL_NAME = "vit_base_patch16_224"
 AESTHETIC_WEIGHTS_URL = "https://huggingface.co/trl-lib/ddpo-aesthetic-predictor/resolve/main/aesthetic-model.pth"
 AESTHETIC_WEIGHTS_PATH = os.path.join(os.path.dirname(__file__), "sa_0.4.pt")
+FINETUNED_WEIGHTS_PATH = Path("models/aesthetic_model_finetuned.pth")
 
 
 def download_weights(url, filename):
@@ -65,19 +67,27 @@ class LAIONAestheticPredictor:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
         
-        # Download and load the aesthetic weights
-        download_weights(AESTHETIC_WEIGHTS_URL, AESTHETIC_WEIGHTS_PATH)
-        weights = torch.load(AESTHETIC_WEIGHTS_PATH, map_location=self.device)
-        
         # Create and load the MLP
         self.linear = AestheticMLP()
-        # Load the weights
-        state_dict = {}
-        for k, v in weights.items():
-            # Map the keys to match the model's state dict format
-            new_key = k.replace('layers.', '') if 'layers.' in k else k
-            state_dict[f'layers.{new_key}'] = v
-        self.linear.load_state_dict(state_dict)
+
+        # Check for a fine-tuned model first
+        if FINETUNED_WEIGHTS_PATH.exists():
+            print("Loading fine-tuned model weights.")
+            # Load the state dict directly from the fine-tuned file
+            self.linear.load_state_dict(torch.load(FINETUNED_WEIGHTS_PATH, map_location=self.device))
+        else:
+            print("No fine-tuned model found. Loading base model weights.")
+            # Download and load the base aesthetic weights if needed
+            download_weights(AESTHETIC_WEIGHTS_URL, AESTHETIC_WEIGHTS_PATH)
+            base_weights = torch.load(AESTHETIC_WEIGHTS_PATH, map_location=self.device)
+            
+            # Map the keys from the base model to the MLP state dict format
+            state_dict = {}
+            for k, v in base_weights.items():
+                new_key = k.replace('layers.', '') if 'layers.' in k else k
+                state_dict[f'layers.{new_key}'] = v
+            self.linear.load_state_dict(state_dict)
+
         self.linear.to(self.device)
         self.linear.eval()
         

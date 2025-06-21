@@ -9,6 +9,7 @@ from PIL import Image, ImageOps
 from pathlib import Path
 import plotly.graph_objects as go
 import plotly.express as px
+import subprocess
 
 # Add project root to Python path
 project_root = str(Path(__file__).parent.parent)
@@ -235,7 +236,44 @@ def main():
         - **Training Data**: LAION-Aesthetics dataset
         - **Features**: Visual composition, color harmony, subject appeal
         """)
-    
+
+        st.markdown("---")
+        st.markdown("### 🧠 Fine-Tune Your Model")
+        st.markdown("""
+        Improve the model's accuracy by training it on your own photos.
+        
+        **Instructions:**
+        1. Add your photos to the `data/custom_training/images` folder.
+        2. Update `data/custom_training/scores.csv` with your filenames and scores (1-10).
+        3. Click the button below to start fine-tuning.
+        """)
+        
+        if st.button("🚀 Start Fine-Tuning"):
+            st.info("Fine-tuning started... This may take a few minutes. Please see the terminal for progress.")
+            
+            # Run the fine-tuning script
+            try:
+                process = subprocess.Popen(
+                    [sys.executable, "src/finetune_model.py"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                # Display output in a dedicated expander
+                with st.expander("Show Fine-Tuning Logs", expanded=True):
+                    stdout, stderr = process.communicate()
+                    if process.returncode == 0:
+                        st.code(stdout, language='text')
+                        st.success("Fine-tuning complete! The app will now use your personalized model.")
+                        st.balloons()
+                    else:
+                        st.code(stderr, language='text')
+                        st.error("Fine-tuning failed. Please check the logs above for errors.")
+                        
+            except Exception as e:
+                st.error(f"An error occurred while trying to run the fine-tuning script: {e}")
+
     # Main content
     col1, col2 = st.columns([2, 1])
     
