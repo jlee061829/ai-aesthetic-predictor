@@ -5,6 +5,30 @@ from PIL import Image
 import timm
 import requests
 
+# A custom transform to resize and pad images to a square
+class ResizeAndPad:
+    def __init__(self, output_size, fill_color=(0, 0, 0)):
+        self.output_size = output_size
+        self.fill_color = fill_color
+
+    def __call__(self, img):
+        # Create a copy to avoid modifying the original image with thumbnail
+        img = img.copy()
+        # Resize the image so that its longest side is `output_size`
+        img.thumbnail((self.output_size, self.output_size), Image.Resampling.LANCZOS)
+        
+        # Create a new square image with a black background
+        new_img = Image.new("RGB", (self.output_size, self.output_size), self.fill_color)
+        
+        # Paste the resized image into the center of the black square
+        paste_position = (
+            (self.output_size - img.width) // 2,
+            (self.output_size - img.height) // 2
+        )
+        new_img.paste(img, paste_position)
+        
+        return new_img
+
 MODEL_NAME = "vit_base_patch16_224"
 AESTHETIC_WEIGHTS_URL = "https://huggingface.co/trl-lib/ddpo-aesthetic-predictor/resolve/main/aesthetic-model.pth"
 AESTHETIC_WEIGHTS_PATH = os.path.join(os.path.dirname(__file__), "sa_0.4.pt")
@@ -63,7 +87,7 @@ class LAIONAestheticPredictor:
         self.model.to(self.device)
         
         self.preprocess = transforms.Compose([
-            transforms.Resize((224, 224)),
+            ResizeAndPad(224), # Use the new custom transform
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.48145466, 0.4578275, 0.40821073],

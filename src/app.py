@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
-from PIL import Image, ExifTags
+from PIL import Image, ImageOps
 from pathlib import Path
 import plotly.graph_objects as go
 import plotly.express as px
@@ -29,27 +29,20 @@ st.markdown("""
 <style>
     /* Main styling */
     .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
+        background: #0e1117;
+        color: #fafafa;
     }
     
     /* Header styling */
     .main-header {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 2rem;
-        margin: 1rem 0;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #0e1117;
+        padding: 1.5rem 0;
+        text-align: center;
     }
     
     .main-header h1 {
-        color: #2d3748;
-        font-size: 3rem;
+        font-size: 2.5rem;
         font-weight: 700;
-        text-align: center;
-        margin-bottom: 0.5rem;
         background: linear-gradient(135deg, #667eea, #764ba2);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -57,46 +50,17 @@ st.markdown("""
     }
     
     .main-header p {
-        color: #4a5568;
         font-size: 1.1rem;
-        text-align: center;
-        margin-bottom: 0;
+        color: #888;
     }
     
-    /* Upload area styling */
-    .upload-area {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
+    /* Analysis box styling */
+    .analysis-box {
+        background: #262730;
         border-radius: 20px;
-        padding: 2rem;
-        margin: 1rem 0;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        text-align: center;
-    }
-    
-    /* Image container styling */
-    .image-container {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 2rem;
-        margin: 1rem 0;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        text-align: center;
-    }
-    
-    /* Score display styling */
-    .score-container {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 2rem;
-        margin: 1rem 0;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        text-align: center;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        border: 1px solid #3c3f58;
     }
     
     .score-value {
@@ -111,8 +75,13 @@ st.markdown("""
     
     .score-label {
         font-size: 1.2rem;
-        color: #4a5568;
+        color: #888;
         margin-bottom: 1rem;
+        text-align: center;
+    }
+
+    .st-emotion-cache-1gulkj5 {
+        text-align: center;
     }
     
     /* Progress bar styling */
@@ -129,6 +98,7 @@ st.markdown("""
         color: white;
         font-weight: 600;
         transition: all 0.3s ease;
+        width: 100%;
     }
     
     .stButton > button:hover {
@@ -141,21 +111,6 @@ st.markdown("""
         border: 2px dashed #667eea;
         border-radius: 15px;
         background: rgba(102, 126, 234, 0.05);
-    }
-    
-    /* Sidebar styling */
-    .css-1d391kg {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-    }
-    
-    /* Info box styling */
-    .info-box {
-        background: rgba(102, 126, 234, 0.1);
-        border-left: 4px solid #667eea;
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 1rem 0;
     }
     
     /* Animation for score */
@@ -172,6 +127,7 @@ st.markdown("""
     
     .score-animation {
         animation: scoreAppear 0.5s ease-out;
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -197,35 +153,6 @@ class MLP(nn.Module):
 def load_model():
     return LAIONAestheticPredictor()
 
-def auto_orient_image(image):
-    """Fix image orientation based on EXIF data"""
-    try:
-        # Check if image has EXIF data
-        if hasattr(image, '_getexif') and image._getexif() is not None:
-            exif = image._getexif()
-            
-            # Find orientation tag
-            orientation = None
-            for tag_id in ExifTags.TAGS:
-                if ExifTags.TAGS[tag_id] == 'Orientation':
-                    orientation = tag_id
-                    break
-            
-            if orientation and orientation in exif:
-                orientation_value = exif[orientation]
-                
-                # Apply rotation based on orientation value
-                if orientation_value == 3:
-                    image = image.rotate(180, expand=True)
-                elif orientation_value == 6:
-                    image = image.rotate(270, expand=True)
-                elif orientation_value == 8:
-                    image = image.rotate(90, expand=True)
-    except Exception as e:
-        st.warning(f"Could not auto-orient image: {e}")
-    
-    return image
-
 def get_score_color(score):
     """Get color based on score"""
     if score >= 8:
@@ -238,25 +165,24 @@ def get_score_color(score):
 def create_score_gauge(score):
     """Create a beautiful gauge chart for the score"""
     fig = go.Figure(go.Indicator(
-        mode = "gauge+number+delta",
+        mode = "gauge+number",
         value = score,
         domain = {'x': [0, 1], 'y': [0, 1]},
-        title = {'text': "Aesthetic Score", 'font': {'size': 24}},
-        delta = {'reference': 5, 'increasing': {'color': "green"}},
+        title = {'text': "Aesthetic Score", 'font': {'size': 24, 'color': '#fafafa'}},
         gauge = {
-            'axis': {'range': [None, 10], 'tickwidth': 1, 'tickcolor': "darkblue"},
+            'axis': {'range': [None, 10], 'tickwidth': 1, 'tickcolor': "#fafafa"},
             'bar': {'color': get_score_color(score)},
-            'bgcolor': "white",
+            'bgcolor': "#262730",
             'borderwidth': 2,
             'bordercolor': "gray",
             'steps': [
-                {'range': [0, 3], 'color': '#FEE2E2'},
-                {'range': [3, 6], 'color': '#FEF3C7'},
-                {'range': [6, 8], 'color': '#D1FAE5'},
-                {'range': [8, 10], 'color': '#DCFCE7'}
+                {'range': [0, 3], 'color': '#3e2d3b'},
+                {'range': [3, 6], 'color': '#4a3d4a'},
+                {'range': [6, 8], 'color': '#3f4a5f'},
+                {'range': [8, 10], 'color': '#3d5a5f'}
             ],
             'threshold': {
-                'line': {'color': "red", 'width': 4},
+                'line': {'color': "#d63031", 'width': 4},
                 'thickness': 0.75,
                 'value': 9
             }
@@ -266,7 +192,8 @@ def create_score_gauge(score):
     fig.update_layout(
         height=300,
         margin=dict(l=20, r=20, t=40, b=20),
-        font={'color': "darkblue", 'family': "Arial"}
+        paper_bgcolor="#262730",
+        font={'color': "#fafafa", 'family': "Arial"}
     )
     
     return fig
@@ -279,6 +206,9 @@ def main():
         <p>Powered by LAION-Aesthetics • Discover the beauty in your images</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Load the model
+    model = load_model()
     
     # Sidebar
     with st.sidebar:
@@ -310,50 +240,37 @@ def main():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Upload area
-        st.markdown('<div class="upload-area">', unsafe_allow_html=True)
+        st.markdown('<div class="analysis-box">', unsafe_allow_html=True)
+        
         uploaded_file = st.file_uploader(
             "📁 Choose an image to analyze...",
             type=["jpg", "jpeg", "png", "webp"],
             help="Upload an image to get its aesthetic score"
         )
-        st.markdown('</div>', unsafe_allow_html=True)
-        
+
         if uploaded_file is not None:
-            # Load and process image
             image = Image.open(uploaded_file).convert("RGB")
-            original_image = image.copy()
             
-            # Auto-orient the image
-            image = auto_orient_image(image)
-            
-            # Display image
-            st.markdown('<div class="image-container">', unsafe_allow_html=True)
-            st.subheader("🖼️ Your Image")
+            # Auto-orient the image using ImageOps
+            image = ImageOps.exif_transpose(image)
             
             # Show image with proper aspect ratio
-            col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
-            with col_img2:
-                st.image(image, use_container_width=True, caption="Analyzed Image")
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.image(image, use_container_width=True, caption="Analyzed Image")
             
             # Analyze image
             with st.spinner("🎨 Analyzing aesthetic quality..."):
                 score = model.predict(image)
             
-            # Display results
-            st.markdown('<div class="score-container">', unsafe_allow_html=True)
+            st.markdown("---")
             st.subheader("📊 Aesthetic Analysis Results")
             
             # Score display
-            col_score1, col_score2, col_score3 = st.columns([1, 2, 1])
-            with col_score2:
-                st.markdown(f"""
-                <div class="score-animation">
-                    <div class="score-value">{score:.1f}</div>
-                    <div class="score-label">out of 10</div>
-                </div>
-                """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="score-animation">
+                <div class="score-value">{score:.1f}</div>
+                <div class="score-label">out of 10</div>
+            </div>
+            """, unsafe_allow_html=True)
             
             # Gauge chart
             gauge_fig = create_score_gauge(score)
@@ -368,33 +285,41 @@ def main():
                 st.warning("📈 **Average.** There's room for improvement in composition or lighting.")
             else:
                 st.error("💡 **Needs work.** Consider improving composition, lighting, or subject matter.")
+        else:
+            st.info("☝️ Upload an image to start the analysis.")
             
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         # Quick tips
-        st.markdown("### 💡 Quick Tips")
+        st.markdown('<div class="analysis-box">', unsafe_allow_html=True)
+        st.markdown("### 💡 Quick Tips For Better Scores")
         st.markdown("""
-        **For better scores:**
         - Use natural lighting
-        - Follow rule of thirds
+        - Follow the rule of thirds
         - Ensure good contrast
         - Choose interesting subjects
         - Pay attention to composition
         
-        **Common mistakes:**
-        - Poor lighting
-        - Cluttered backgrounds
+        ---
+        
+        #### **Common Mistakes to Avoid:**
+        - Poor or harsh lighting
+        - Cluttered or distracting backgrounds
         - Unbalanced composition
-        - Low resolution
-        - Blurry images
+        - Low resolution or pixelation
+        - Blurry or out-of-focus images
         """)
         
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown('<div class="analysis-box" style="margin-top: 1rem;">', unsafe_allow_html=True)
         # Recent scores (placeholder for future feature)
         st.markdown("### 📈 Recent Scores")
         st.markdown("""
         *Coming soon: Track your improvement over time!*
         """)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
