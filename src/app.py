@@ -10,6 +10,12 @@ from pathlib import Path
 import plotly.graph_objects as go
 import plotly.express as px
 import subprocess
+import cv2
+
+# Fix for PyTorch compatibility issues with Streamlit
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 
 # Add project root to Python path
 project_root = str(Path(__file__).parent.parent)
@@ -199,6 +205,66 @@ def create_score_gauge(score):
     
     return fig
 
+# --- New Statistics Functions ---
+
+def calculate_sharpness(image_array):
+    """Calculate image sharpness using the variance of the Laplacian."""
+    gray = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    return laplacian_var
+
+def extract_color_palette(image, num_colors=5):
+    """Extract the dominant color palette from an image using histogram method."""
+    # Resize for faster processing
+    img = image.copy()
+    img.thumbnail((100, 100))
+    
+    # Convert to numpy array
+    pixels = np.array(img)
+    
+    # Calculate histograms for each channel
+    hist_r = np.histogram(pixels[:, :, 0], bins=8, range=(0, 256))[0]
+    hist_g = np.histogram(pixels[:, :, 1], bins=8, range=(0, 256))[0]
+    hist_b = np.histogram(pixels[:, :, 2], bins=8, range=(0, 256))[0]
+    
+    # Find the most common color ranges
+    colors = []
+    for i in range(num_colors):
+        # Find the bin with the highest count for each channel
+        r_bin = np.argmax(hist_r)
+        g_bin = np.argmax(hist_g)
+        b_bin = np.argmax(hist_b)
+        
+        # Convert bin to color value (center of the bin)
+        r_val = int((r_bin + 0.5) * 256 / 8)
+        g_val = int((g_bin + 0.5) * 256 / 8)
+        b_val = int((b_bin + 0.5) * 256 / 8)
+        
+        colors.append([r_val, g_val, b_val])
+        
+        # Reduce the count for this bin to find the next most common color
+        hist_r[r_bin] = 0
+        hist_g[g_bin] = 0
+        hist_b[b_bin] = 0
+    
+    return np.array(colors)
+def create_brightness_histogram(image_array):
+    """Create a brightness histogram for the image."""
+    gray = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
+    hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
+    
+    fig = go.Figure(data=[go.Bar(x=np.arange(256), y=hist.ravel())])
+    fig.update_layout(
+        title_text='Brightness Distribution',
+        xaxis_title='Pixel Intensity (0=Black, 255=White)',
+        yaxis_title='Pixel Count',
+        paper_bgcolor="#262730",
+        plot_bgcolor="#262730",
+        font={'color': "#fafafa"},
+        bargap=0,
+    )
+    return fig
+
 def main():
     # Header
     st.markdown("""
@@ -323,6 +389,40 @@ def main():
                 st.warning("📈 **Average.** There's room for improvement in composition or lighting.")
             else:
                 st.error("💡 **Needs work.** Consider improving composition, lighting, or subject matter.")
+            
+            st.markdown("---")
+            st.subheader("🔬 Image Statistics")
+
+            # --- Display New Statistics ---
+            image_array = np.array(image)
+            tab1, tab2, tab3 = st.tabs(["🎨 Color Palette", "💡 Brightness", "🔪 Sharpness"])
+
+            with tab1:
+                st.write("Dominant Colors in Your Image:")
+                palette = extract_color_palette(image)
+                cols = st.columns(len(palette))
+                for i, color in enumerate(palette):
+                    hex_color = f'#{color[0]:02x}{color[1]:02x}{color[2]:02x}'
+                    with cols[i]:
+                        st.color_picker(label=f'Color {i+1}', value=hex_color, key=f'color_picker_{i}')
+
+            with tab2:
+                st.write("Brightness & Contrast Analysis:")
+                brightness_fig = create_brightness_histogram(image_array)
+                st.plotly_chart(brightness_fig, use_container_width=True)
+                st.info("A well-exposed photo typically has a histogram with a good spread of tones across the range, without being bunched up at the edges.")
+
+            with tab3:
+                st.write("Sharpness & Focus Analysis:")
+                sharpness = calculate_sharpness(image_array)
+                st.metric(label="Sharpness Score (Laplacian Variance)", value=f"{sharpness:.2f}")
+                
+                if sharpness < 50:
+                    st.warning("This image may be soft or slightly out of focus.")
+                elif sharpness > 200:
+                    st.success("This image appears to be sharp and in focus.")
+                else:
+                    st.info("This image has an average level of sharpness.")
         else:
             st.info("☝️ Upload an image to start the analysis.")
             
