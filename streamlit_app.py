@@ -12,8 +12,8 @@ from pathlib import Path
 project_root = str(Path(__file__).parent)
 sys.path.append(project_root)
 
-# Import and run the deployment-optimized app
-from src.app_deploy import main
+# Import and run the minimal app
+from src.app_minimal import main
 
 if __name__ == "__main__":
     main() 
