@@ -3,6 +3,7 @@ port = 8501
 address = "0.0.0.0"
 enableCORS = false
 enableXsrfProtection = false
+maxUploadSize = 200
 
 [browser]
 gatherUsageStats = false
@@ -11,4 +12,7 @@ gatherUsageStats = false
 primaryColor = "#667eea"
 backgroundColor = "#0e1117"
 secondaryBackgroundColor = "#262730"
-textColor = "#fafafa" 
+textColor = "#fafafa"
+
+[logger]
+level = "info" 
