@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""
+Streamlit Cloud deployment entry point
+This file is used for Streamlit Cloud deployment
+"""
+
+import os
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = str(Path(__file__).parent)
+sys.path.append(project_root)
+
+# Import and run the main app
+from src.app import main
+
+if __name__ == "__main__":
+    main() 
